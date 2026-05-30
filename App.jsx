@@ -1,5 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FaceLandmarker, FilesetResolver, HandLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
+import { Analytics } from "@vercel/analytics/react";
 import brattyIcon from "./assets/bratty.png";
 import cakeIcon from "./assets/cake.png";
 import clockIcon from "./assets/clock.png";
@@ -2286,6 +2287,7 @@ export default function App() {
           </LayoutSection>
         </div>
       </div>
+      <Analytics />
     </div>
   );
 }
