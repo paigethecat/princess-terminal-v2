@@ -66,12 +66,13 @@ const DEFAULT_LAYOUT_POSITIONS = {
   madeBy: { x: 242, y: -129 }
 };
 
-const TRANSMISSION_MAX_PARTICLES = 1250;
+const TRANSMISSION_MAX_PARTICLES = 950;
 const TRANSMISSION_COLUMN_SPACING = 18;
 const TRANSMISSION_BASE_SPEED = 118;
 const TRANSMISSION_BODY_PUSH = 2.2;
 const TRANSMISSION_HAND_RADIUS = 118;
 const TRANSMISSION_HAND_PUSH = 2.7;
+const TRANSMISSION_HAND_DETECTION_INTERVAL = 55;
 const TRANSMISSION_CHARACTERS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{};:,.<>/?|\\~`▓▒░█▄▀<>//\\\\";
 const PORTAL_MIN_RADIUS = 34;
@@ -80,6 +81,8 @@ const PORTAL_GROWTH_RATE = 34;
 const PORTAL_SMOOTHING = 0.28;
 const PORTAL_ORB_RADIUS = 94;
 const PORTAL_MAX_COUNT = 5;
+const PORTAL_HAND_DETECTION_INTERVAL = 55;
+const SCANNER_HAND_DETECTION_INTERVAL = 42;
 const SCANNER_OBJECT_CONFIDENCE_THRESHOLD = 0.55;
 const SCANNER_OBJECT_MAX_LABELS = 5;
 const SCANNER_OBJECT_DETECTION_INTERVAL = 1300;
@@ -1183,7 +1186,9 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
   const lastVideoTimeRef = useRef(-1);
   const lastTransmissionVideoTimeRef = useRef(-1);
   const lastTransmissionHandVideoTimeRef = useRef(-1);
+  const lastTransmissionHandDetectTimeRef = useRef(0);
   const lastHandVideoTimeRef = useRef(-1);
+  const lastPortalHandDetectTimeRef = useRef(0);
   const animationFrameRef = useRef(null);
   const transmissionFrameRef = useRef(null);
   const portalFrameRef = useRef(null);
@@ -1197,6 +1202,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
   const scannerRibbonPointRef = useRef(null);
   const scannerPointerActiveRef = useRef(false);
   const lastScannerHandVideoTimeRef = useRef(-1);
+  const lastScannerHandDetectTimeRef = useRef(0);
   const transmissionParticlesRef = useRef([]);
   const transmissionZonesRef = useRef([]);
   const transmissionHandForcesRef = useRef([]);
@@ -1606,6 +1612,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       previousTransmissionHandsRef.current = [];
       lastTransmissionFrameTimeRef.current = 0;
       lastTransmissionHandVideoTimeRef.current = -1;
+      lastTransmissionHandDetectTimeRef.current = 0;
       transmissionSpawnRemainderRef.current = 0;
       return undefined;
     }
@@ -1625,8 +1632,14 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       ctx.clearRect(0, 0, metrics.viewportWidth, metrics.viewportHeight);
 
       const handLandmarker = handLandmarkerRef.current;
-      if (handLandmarker && video?.readyState >= 2 && video.currentTime !== lastTransmissionHandVideoTimeRef.current) {
+      if (
+        handLandmarker &&
+        video?.readyState >= 2 &&
+        video.currentTime !== lastTransmissionHandVideoTimeRef.current &&
+        now - lastTransmissionHandDetectTimeRef.current > TRANSMISSION_HAND_DETECTION_INTERVAL
+      ) {
         lastTransmissionHandVideoTimeRef.current = video.currentTime;
+        lastTransmissionHandDetectTimeRef.current = now;
         const result = handLandmarker.detectForVideo(video, now);
         transmissionHandForcesRef.current = getTransmissionHandForces(
           result.landmarks ?? [],
@@ -1733,6 +1746,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     if (!canvas || !viewport || !scannerActive) {
       scannerRibbonPointRef.current = null;
       lastScannerHandVideoTimeRef.current = -1;
+      lastScannerHandDetectTimeRef.current = 0;
       return undefined;
     }
 
@@ -1754,9 +1768,17 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       }
 
       const handLandmarker = handLandmarkerRef.current;
-      if (!scannerPointerActiveRef.current && handLandmarker && video?.readyState >= 2 && video.currentTime !== lastScannerHandVideoTimeRef.current) {
+      const now = performance.now();
+      if (
+        !scannerPointerActiveRef.current &&
+        handLandmarker &&
+        video?.readyState >= 2 &&
+        video.currentTime !== lastScannerHandVideoTimeRef.current &&
+        now - lastScannerHandDetectTimeRef.current > SCANNER_HAND_DETECTION_INTERVAL
+      ) {
         lastScannerHandVideoTimeRef.current = video.currentTime;
-        const result = handLandmarker.detectForVideo(video, performance.now());
+        lastScannerHandDetectTimeRef.current = now;
+        const result = handLandmarker.detectForVideo(video, now);
         const hand = result.landmarks?.[0];
         const pen = hand ? getScannerPenPoint(hand, metrics) : { point: null, isPenUp: true };
 
@@ -1857,11 +1879,16 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     const video = videoRef.current;
     const viewport = viewportRef.current;
 
+    if (portalPreset !== "echo") {
+      echoFramesRef.current = [];
+    }
+
     if (!canvas || !video || !viewport || !portalActive || !hasCamera) {
       if (canvas) {
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
+      lastPortalHandDetectTimeRef.current = 0;
       return undefined;
     }
 
@@ -1878,9 +1905,15 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
 
       const handLandmarker = handLandmarkerRef.current;
 
-      if (handLandmarker && video.readyState >= 2 && video.currentTime !== lastHandVideoTimeRef.current) {
+      if (
+        handLandmarker &&
+        video.readyState >= 2 &&
+        video.currentTime !== lastHandVideoTimeRef.current &&
+        now - lastPortalHandDetectTimeRef.current > PORTAL_HAND_DETECTION_INTERVAL
+      ) {
         lastHandVideoTimeRef.current = video.currentTime;
-        const result = handLandmarker.detectForVideo(video, performance.now());
+        lastPortalHandDetectTimeRef.current = now;
+        const result = handLandmarker.detectForVideo(video, now);
         const hands = result.landmarks ?? [];
         const handState = hands
           .map((hand) => getHandGesture(hand, metrics))
@@ -1920,7 +1953,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         );
       });
 
-      if (now - lastEchoCaptureRef.current > 150) {
+      if (portalPreset === "echo" && now - lastEchoCaptureRef.current > 150) {
         const echoCanvas = document.createElement("canvas");
         echoCanvas.width = metrics.viewportWidth;
         echoCanvas.height = metrics.viewportHeight;
