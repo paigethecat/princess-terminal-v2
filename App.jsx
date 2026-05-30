@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { FaceLandmarker, FilesetResolver, HandLandmarker, PoseLandmarker } from "@mediapipe/tasks-vision";
 import brattyIcon from "./assets/bratty.png";
 import cakeIcon from "./assets/cake.png";
@@ -1206,7 +1206,9 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
   const echoFramesRef = useRef([]);
   const lastEchoCaptureRef = useRef(0);
   const recordingRef = useRef(null);
+  const cameraStreamRef = useRef(null);
   const [cameraUnavailable, setCameraUnavailable] = useState(false);
+  const [cameraMessage, setCameraMessage] = useState("");
   const [hasCamera, setHasCamera] = useState(false);
   const [faceBox, setFaceBox] = useState(null);
   const [compliment, setCompliment] = useState(getCompliment(scannerMode));
@@ -1341,7 +1343,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.letterSpacing = "0.5em";
-      ctx.fillText(cameraUnavailable ? "camera unavailable" : "webcam here", viewportWidth / 2, viewportHeight / 2);
+      ctx.fillText(cameraUnavailable ? cameraMessage || "camera unavailable" : "webcam here", viewportWidth / 2, viewportHeight / 2);
       ctx.restore();
     }
 
@@ -1471,53 +1473,76 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     isRecording: () => recordingRef.current?.recorder?.state === "recording"
   }));
 
-  useEffect(() => {
-    let stream;
-    let isMounted = true;
-
-    async function startCamera() {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraUnavailable(true);
-        return;
-      }
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: false
-        });
-
-        if (!isMounted || !videoRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        setHasCamera(true);
-      } catch {
-        if (stream) {
-          stream.getTracks().forEach((track) => track.stop());
-        }
-        if (isMounted) {
-          setHasCamera(false);
-          setCameraUnavailable(true);
-        }
-      }
+  const startCamera = useCallback(async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setHasCamera(false);
+      setCameraUnavailable(true);
+      setCameraMessage("camera unavailable");
+      return false;
     }
 
+    setCameraUnavailable(false);
+    setCameraMessage("requesting camera");
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false
+      });
+
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      cameraStreamRef.current = stream;
+
+      if (!videoRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
+        return false;
+      }
+
+      videoRef.current.srcObject = stream;
+
+      try {
+        await videoRef.current.play();
+      } catch {
+        setHasCamera(false);
+        setCameraUnavailable(false);
+        setCameraMessage("click start camera to continue");
+        return false;
+      }
+
+      setHasCamera(true);
+      setCameraUnavailable(false);
+      setCameraMessage("");
+      return true;
+    } catch (error) {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
+      }
+
+      setHasCamera(false);
+      setCameraUnavailable(true);
+      setCameraMessage(error?.name === "NotAllowedError" ? "camera permission denied" : "camera unavailable");
+      return false;
+    }
+  }, []);
+
+  useEffect(() => {
     startCamera();
 
     return () => {
-      isMounted = false;
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach((track) => track.stop());
+        cameraStreamRef.current = null;
       }
       if (videoRef.current) {
         videoRef.current.srcObject = null;
       }
     };
-  }, []);
+  }, [startCamera]);
 
   useEffect(() => {
     setFaceBox(null);
@@ -2029,9 +2054,25 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       <div className="corner corner-br" />
       <div className="relative z-10 flex h-full items-center justify-center">
         {!hasCamera && (
-          <p className="select-none font-mono text-xl font-normal lowercase tracking-[0.5em] text-cobalt sm:text-2xl">
-            {cameraUnavailable ? "camera unavailable" : "webcam here"}
-          </p>
+          <div className="camera-start-panel flex flex-col items-center gap-3 text-center">
+            <p className="select-none font-mono text-xl font-normal lowercase tracking-[0.5em] text-cobalt sm:text-2xl">
+              {cameraUnavailable ? cameraMessage || "camera unavailable" : "webcam here"}
+            </p>
+            <button
+              type="button"
+              className="retro-bevel border border-black/35 bg-[#ededed] px-5 py-2 font-mono text-xs font-bold uppercase tracking-[0.18em] text-cobalt"
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                startCamera();
+              }}
+            >
+              START CAMERA
+            </button>
+            {cameraMessage && !cameraUnavailable && (
+              <p className="font-mono text-[10px] lowercase tracking-[0.18em] text-cobalt">{cameraMessage}</p>
+            )}
+          </div>
         )}
       </div>
     </main>
