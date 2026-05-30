@@ -57,8 +57,14 @@ const portalPresets = [
 
 const titleText = "PRINCESS TERMINAL";
 const titleHues = [318, 344, 8, 28, 48, 82, 118, 152, 180, 204, 224, 246, 272, 296, 316];
-const LAYOUT_STORAGE_KEY = "princess-terminal-layout-positions";
-const DEFAULT_LAYOUT_POSITIONS = {};
+const DEFAULT_LAYOUT_POSITIONS = {
+  title: { x: -62, y: -18 },
+  captureControls: { x: -3, y: 18 },
+  internetTime: { x: -1262, y: -11 },
+  instructions: { x: 325, y: -10 },
+  systemInfo: { x: 52, y: -44 },
+  madeBy: { x: 242, y: -129 }
+};
 
 const TRANSMISSION_MAX_PARTICLES = 1250;
 const TRANSMISSION_COLUMN_SPACING = 18;
@@ -225,76 +231,16 @@ function UtilityIcon({ type, active = false }) {
 }
 
 function loadLayoutPositions() {
-  try {
-    return {
-      ...DEFAULT_LAYOUT_POSITIONS,
-      ...JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || "{}")
-    };
-  } catch {
-    return DEFAULT_LAYOUT_POSITIONS;
-  }
+  return DEFAULT_LAYOUT_POSITIONS;
 }
 
-function LayoutSection({ id, editMode, position, onMove, children, className = "" }) {
-  const dragRef = useRef(null);
-  const [dragging, setDragging] = useState(false);
+function LayoutSection({ id, position, children, className = "" }) {
   const currentPosition = position ?? { x: 0, y: 0 };
-
-  const handlePointerDown = (event) => {
-    if (!editMode) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: currentPosition.x,
-      originY: currentPosition.y
-    };
-    setDragging(true);
-  };
-
-  const handlePointerMove = (event) => {
-    if (!editMode || !dragRef.current || dragRef.current.pointerId !== event.pointerId) {
-      return;
-    }
-
-    onMove(id, {
-      x: Math.round(dragRef.current.originX + event.clientX - dragRef.current.startX),
-      y: Math.round(dragRef.current.originY + event.clientY - dragRef.current.startY)
-    });
-  };
-
-  const endDrag = (event) => {
-    if (dragRef.current?.pointerId === event.pointerId) {
-      dragRef.current = null;
-      setDragging(false);
-    }
-  };
 
   return (
     <div
-      className={[
-        "layout-positioned",
-        editMode ? "is-editable" : "",
-        dragging ? "is-dragging" : "",
-        className
-      ].join(" ")}
+      className={["layout-positioned", className].join(" ")}
       style={{ transform: `translate(${currentPosition.x}px, ${currentPosition.y}px)` }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onClickCapture={(event) => {
-        if (editMode) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-      }}
       data-layout-section={id}
     >
       {children}
@@ -2099,51 +2045,13 @@ export default function App() {
   const [portalPreset, setPortalPreset] = useState("fisheye");
   const [isRecording, setIsRecording] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [layoutEditMode, setLayoutEditMode] = useState(false);
-  const [layoutPositions, setLayoutPositions] = useState(loadLayoutPositions);
+  const [layoutPositions] = useState(loadLayoutPositions);
   const webcamRef = useRef(null);
   const lastCaptureRef = useRef(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
-  }, []);
-
-  const exportLayoutPositions = () => {
-    const json = JSON.stringify(layoutPositions, null, 2);
-    console.info("PRINCESS_TERMINAL_LAYOUT_POSITIONS", json);
-
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(json).catch(() => {});
-    }
-
-    return json;
-  };
-
-  useEffect(() => {
-    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layoutPositions));
-  }, [layoutPositions]);
-
-  useEffect(() => {
-    window.exportPrincessLayout = exportLayoutPositions;
-    return () => {
-      delete window.exportPrincessLayout;
-    };
-  }, [layoutPositions]);
-
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.repeat || event.metaKey || event.ctrlKey || event.altKey) {
-        return;
-      }
-
-      if (event.key.toLowerCase() === "l") {
-        setLayoutEditMode((current) => !current);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const handleCaptureReady = (capture) => {
@@ -2171,31 +2079,14 @@ export default function App() {
     }
   };
 
-  const updateLayoutPosition = (id, nextPosition) => {
-    setLayoutPositions((current) => ({
-      ...current,
-      [id]: nextPosition
-    }));
-  };
-
   return (
-    <div className={["app-shell min-h-screen bg-shell px-5 pb-4 pt-10 text-[#1c1c1c] sm:px-8 sm:pt-12 lg:px-9", layoutEditMode ? "layout-edit-mode" : ""].join(" ")}>
+    <div className="app-shell min-h-screen bg-shell px-5 pb-4 pt-10 text-[#1c1c1c] sm:px-8 sm:pt-12 lg:px-9">
       <SparkleCursor />
-      {layoutEditMode && (
-        <div className="layout-edit-tools font-mono">
-          <span>layout edit mode</span>
-          <button type="button" onClick={exportLayoutPositions}>
-            export JSON
-          </button>
-        </div>
-      )}
       <div className="mx-auto flex max-w-[1780px] flex-col">
         <header className="app-header mb-5 text-center">
           <LayoutSection
             id="title"
-            editMode={layoutEditMode}
             position={layoutPositions.title}
-            onMove={updateLayoutPosition}
           >
             <div className="logo-frame">
               <LogoTitle />
@@ -2210,9 +2101,7 @@ export default function App() {
           <aside className="left-rail">
             <LayoutSection
               id="modeButtons"
-              editMode={layoutEditMode}
               position={layoutPositions.modeButtons}
-              onMove={updateLayoutPosition}
               className="w-full"
             >
               <div className="mode-stack">
@@ -2242,9 +2131,7 @@ export default function App() {
             <div className="right-control-stack">
               <LayoutSection
                 id="scannerPanel"
-                editMode={layoutEditMode}
                 position={layoutPositions.scannerPanel}
-                onMove={updateLayoutPosition}
               >
                 <OptionPanel
                   title="scanner mode"
@@ -2255,9 +2142,7 @@ export default function App() {
               </LayoutSection>
               <LayoutSection
                 id="portalPanel"
-                editMode={layoutEditMode}
                 position={layoutPositions.portalPanel}
-                onMove={updateLayoutPosition}
               >
                 <OptionPanel
                   title="portal presets"
@@ -2275,9 +2160,7 @@ export default function App() {
             <div />
             <LayoutSection
               id="captureControls"
-              editMode={layoutEditMode}
               position={layoutPositions.captureControls}
-              onMove={updateLayoutPosition}
               className="footer-controls"
             >
               <div className="flex flex-wrap justify-center gap-16">
@@ -2304,34 +2187,26 @@ export default function App() {
           <div className="lower-left-stack">
             <LayoutSection
               id="systemInfo"
-              editMode={layoutEditMode}
               position={layoutPositions.systemInfo}
-              onMove={updateLayoutPosition}
             >
               <StatusPanel />
             </LayoutSection>
             <LayoutSection
               id="madeBy"
-              editMode={layoutEditMode}
               position={layoutPositions.madeBy}
-              onMove={updateLayoutPosition}
             >
               <MadeByBadge />
             </LayoutSection>
           </div>
           <LayoutSection
             id="instructions"
-            editMode={layoutEditMode}
             position={layoutPositions.instructions}
-            onMove={updateLayoutPosition}
           >
             <InstructionsPanel />
           </LayoutSection>
           <LayoutSection
             id="internetTime"
-            editMode={layoutEditMode}
             position={layoutPositions.internetTime}
-            onMove={updateLayoutPosition}
           >
             <InternetTimePanel now={now} />
           </LayoutSection>
