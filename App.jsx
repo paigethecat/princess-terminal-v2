@@ -55,7 +55,7 @@ const portalPresets = [
   { id: "tunnel", label: "tunnel", art: "tunnel" }
 ];
 
-const titleText = "PRINCESS TERMINAL";
+const titleText = "Princess Terminal";
 const titleHues = [318, 344, 8, 28, 48, 82, 118, 152, 180, 204, 224, 246, 272, 296, 316];
 const DEFAULT_LAYOUT_POSITIONS = {
   title: { x: -62, y: -18 },
@@ -75,6 +75,10 @@ const TRANSMISSION_HAND_PUSH = 2.7;
 const TRANSMISSION_HAND_DETECTION_INTERVAL = 55;
 const TRANSMISSION_CHARACTERS =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()_+-=[]{};:,.<>/?|\\~`▓▒░█▄▀<>//\\\\";
+const TRANSMISSION_ACCENTS = [
+  { char: "♡", color: "rgba(255, 84, 170, 0.92)", shadow: "rgba(255, 84, 170, 0.7)" },
+  { char: "☆", color: "rgba(255, 234, 108, 0.9)", shadow: "rgba(255, 220, 80, 0.7)" }
+];
 const PORTAL_MIN_RADIUS = 34;
 const PORTAL_MAX_RADIUS_RATIO = 0.46;
 const PORTAL_GROWTH_RATE = 34;
@@ -310,34 +314,223 @@ function SparkleCursor() {
 }
 
 function LogoTitle() {
-  let letterIndex = 0;
+  return (
+    <h1 className="rainbow-title" aria-label="Princess Terminal">
+      {titleText}
+    </h1>
+  );
+}
+
+function CrownIcon() {
+  return (
+    <span className="pt-crown-icon" aria-hidden="true">
+      <svg viewBox="0 0 72 58" role="presentation">
+        <path d="M9 49h54l-5-31-14 17-8-24-8 24-14-17z" />
+        <path d="M16 48h40" />
+        <circle cx="9" cy="17" r="3" />
+        <circle cx="36" cy="9" r="3" />
+        <circle cx="63" cy="17" r="3" />
+      </svg>
+    </span>
+  );
+}
+
+function DigitIcon() {
+  return (
+    <span className="pt-digit-icon" aria-hidden="true">
+      <span>0 1 0</span>
+      <span>1 0 1</span>
+      <span>0 0 1</span>
+      <span>1 1 0</span>
+    </span>
+  );
+}
+
+function WindowControls({ onClose }) {
+  return (
+    <span className="pt-popup-controls" onPointerDown={(event) => event.stopPropagation()}>
+      <button type="button" onClick={onClose} title="close">×</button>
+    </span>
+  );
+}
+
+function PopupWindow({ id, title, defaultPosition, children, className = "", onClose }) {
+  const [position, setPosition] = useState(defaultPosition);
+  const [size, setSize] = useState(null);
+  const windowRef = useRef(null);
+  const dragRef = useRef(null);
+  const resizeRef = useRef(null);
+
+  const updateResizeFromEvent = useCallback((event) => {
+    if (!resizeRef.current) {
+      return;
+    }
+
+    if (
+      resizeRef.current.pointerId !== null &&
+      event.pointerId !== undefined &&
+      resizeRef.current.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    const deltaX = event.clientX - resizeRef.current.startX;
+    const deltaY = event.clientY - resizeRef.current.startY;
+    const scaleDelta = Math.min(deltaX / resizeRef.current.maxWidth, deltaY / resizeRef.current.maxHeight);
+    const nextScale = clamp(resizeRef.current.scale + scaleDelta, 0.68, 1);
+    setSize({
+      width: resizeRef.current.maxWidth,
+      height: resizeRef.current.maxHeight,
+      maxWidth: resizeRef.current.maxWidth,
+      maxHeight: resizeRef.current.maxHeight,
+      scale: nextScale
+    });
+  }, []);
+
+  const endResize = useCallback(() => {
+    resizeRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!windowRef.current || size) {
+      return;
+    }
+
+    const rect = windowRef.current.getBoundingClientRect();
+    setSize({
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      maxWidth: Math.round(rect.width),
+      maxHeight: Math.round(rect.height),
+      scale: 1
+    });
+  }, [size]);
+
+  useEffect(() => {
+    window.addEventListener("pointermove", updateResizeFromEvent);
+    window.addEventListener("pointerup", endResize);
+    window.addEventListener("mousemove", updateResizeFromEvent);
+    window.addEventListener("mouseup", endResize);
+
+    return () => {
+      window.removeEventListener("pointermove", updateResizeFromEvent);
+      window.removeEventListener("pointerup", endResize);
+      window.removeEventListener("mousemove", updateResizeFromEvent);
+      window.removeEventListener("mouseup", endResize);
+    };
+  }, [endResize, updateResizeFromEvent]);
+
+  const handlePointerDown = (event) => {
+    event.stopPropagation();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: position.x,
+      y: position.y
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event) => {
+    if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const nextX = dragRef.current.x + event.clientX - dragRef.current.startX;
+    const nextY = dragRef.current.y + event.clientY - dragRef.current.startY;
+    setPosition({
+      x: clamp(nextX, 8, window.innerWidth - 180),
+      y: clamp(nextY, 84, window.innerHeight - 110)
+    });
+  };
+
+  const handlePointerUp = (event) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
+  const handleResizePointerDown = (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    const rect = windowRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    resizeRef.current = {
+      pointerId: event.pointerId ?? null,
+      startX: event.clientX,
+      startY: event.clientY,
+      width: size?.width ?? rect.width,
+      height: size?.height ?? rect.height,
+      maxWidth: size?.maxWidth ?? rect.width,
+      maxHeight: size?.maxHeight ?? rect.height,
+      scale: size?.scale ?? 1
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handleResizePointerMove = (event) => {
+    updateResizeFromEvent(event);
+  };
+
+  const handleResizePointerUp = (event) => {
+    endResize();
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
 
   return (
-    <h1 className="rainbow-title" aria-label="PRINCESS TERMINAL">
-      {titleText.split("").map((character, index) => {
-        if (character === " ") {
-          return (
-            <span key={index} className="title-space" aria-hidden="true">
-              {" "}
-            </span>
-          );
-        }
+    <section
+      ref={windowRef}
+      className={["pt-popup-window", className].join(" ")}
+      data-popup={id}
+      style={{
+        left: position.x,
+        top: position.y,
+        width: size ? `${size.width}px` : undefined,
+        height: size ? `${size.height}px` : undefined,
+        transform: size ? `scale(${size.scale})` : undefined
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <div
+        className="pt-popup-titlebar"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      >
+        <h2>{title}</h2>
+        <WindowControls onClose={onClose} />
+      </div>
+      <div className="pt-popup-body">{children}</div>
+      <span
+        className="pt-resize-handle"
+        aria-hidden="true"
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerUp}
+        onPointerCancel={handleResizePointerUp}
+        onMouseDown={handleResizePointerDown}
+      />
+    </section>
+  );
+}
 
-        const hue = titleHues[letterIndex % titleHues.length];
-        letterIndex += 1;
-
-        return (
-          <span
-            key={index}
-            className="title-letter"
-            style={{ "--title-hue": hue }}
-            aria-hidden="true"
-          >
-            {character}
-          </span>
-        );
-      })}
-    </h1>
+function ToolOption({ option, selected, onSelect }) {
+  return (
+    <button
+      type="button"
+      className={["pt-tool-option", selected ? "is-selected" : ""].join(" ")}
+      aria-pressed={selected}
+      onClick={() => onSelect(option.id)}
+    >
+      <IconArt type={option.art} size="small" />
+      <span>{option.label}</span>
+    </button>
   );
 }
 
@@ -761,8 +954,11 @@ function createTransmissionParticle(metrics, fromTop = true, index = 0) {
   const homeX = column * TRANSMISSION_COLUMN_SPACING + TRANSMISSION_COLUMN_SPACING * 0.5 + (Math.random() - 0.5) * 3;
   const size = 13 + Math.random() * 9;
   const baseVy = TRANSMISSION_BASE_SPEED + Math.random() * 54;
+  const accent = Math.random() < 0.045 ? TRANSMISSION_ACCENTS[Math.floor(Math.random() * TRANSMISSION_ACCENTS.length)] : null;
   return {
-    char: TRANSMISSION_CHARACTERS[Math.floor(Math.random() * TRANSMISSION_CHARACTERS.length)],
+    char: accent?.char ?? TRANSMISSION_CHARACTERS[Math.floor(Math.random() * TRANSMISSION_CHARACTERS.length)],
+    color: accent?.color ?? "#ffffff",
+    shadow: accent?.shadow ?? "rgba(255, 255, 255, 0.45)",
     x: homeX,
     homeX,
     y: fromTop ? -size - Math.random() * metrics.viewportHeight * 0.18 : Math.random() * metrics.viewportHeight,
@@ -998,9 +1194,10 @@ function mergeScannerObjectLabels(previousLabels, detections) {
   return [...updated, ...fading].slice(0, SCANNER_OBJECT_MAX_LABELS);
 }
 
-function displaceTransmissionParticle(particle, zones, handForces, deltaSeconds, now) {
+function displaceTransmissionParticle(particle, zones, handForces, deltaSeconds, now, sensitivity = 1, speedMultiplier = 1) {
   let vx = particle.vx * 0.86 + (particle.homeX - particle.x) * 0.08 + Math.sin(now * 0.0012 + particle.phase) * particle.drift;
-  let vy = particle.vy + (particle.baseVy - particle.vy) * 0.035;
+  const targetVy = particle.baseVy * speedMultiplier;
+  let vy = particle.vy + (targetVy - particle.vy) * 0.035;
 
   zones.forEach((zone) => {
     const dx = particle.x - zone.x;
@@ -1024,10 +1221,11 @@ function displaceTransmissionParticle(particle, zones, handForces, deltaSeconds,
     const dy = particle.y - hand.y;
     const distance = Math.hypot(dx, dy);
 
-    if (distance < TRANSMISSION_HAND_RADIUS) {
-      const falloff = (TRANSMISSION_HAND_RADIUS - distance) / TRANSMISSION_HAND_RADIUS;
+    const handRadius = TRANSMISSION_HAND_RADIUS * sensitivity;
+    if (distance < handRadius) {
+      const falloff = (handRadius - distance) / handRadius;
       const safeDistance = Math.max(distance, 8);
-      const swat = TRANSMISSION_HAND_PUSH * falloff * (0.55 + hand.speed / 420);
+      const swat = TRANSMISSION_HAND_PUSH * sensitivity * falloff * (0.55 + hand.speed / 420);
       const motionX = hand.speed > 30 ? hand.vx / Math.max(hand.speed, 1) : 0;
       const motionY = hand.speed > 30 ? hand.vy / Math.max(hand.speed, 1) : 0;
 
@@ -1041,7 +1239,7 @@ function displaceTransmissionParticle(particle, zones, handForces, deltaSeconds,
     x: particle.x + vx * deltaSeconds,
     y: particle.y + vy * deltaSeconds,
     vx,
-    vy: clamp(vy, TRANSMISSION_BASE_SPEED * 0.55, particle.baseVy * 2.4),
+    vy: clamp(vy, TRANSMISSION_BASE_SPEED * 0.55 * speedMultiplier, particle.baseVy * 2.4 * speedMultiplier),
     rotation: particle.rotation + particle.rotationSpeed * deltaSeconds + clamp(vx, -200, 200) * 0.00008
   };
 }
@@ -1174,7 +1372,16 @@ function drawRibbonSegment(ctx, from, to, scannerMode, randomRibbonColor) {
   ctx.restore();
 }
 
-const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, scannerMode, scannerRibbonColor, portalPreset, onCaptureReady, onRecordingStateChange }, ref) {
+const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({
+  activeMode,
+  scannerMode,
+  scannerRibbonColor,
+  portalPreset,
+  transmissionSensitivity = 1,
+  transmissionSpeed = 1,
+  onCaptureReady,
+  onRecordingStateChange
+}, ref) {
   const videoRef = useRef(null);
   const viewportRef = useRef(null);
   const scannerCanvasRef = useRef(null);
@@ -1269,6 +1476,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         baseX: fingerCursorRef.current.x,
         baseY: fingerCursorRef.current.y,
         radius: Math.min(metrics.viewportWidth, metrics.viewportHeight) * 0.25,
+        preset: portalPreset,
         state: "editing",
         growing: false,
         phase: Math.random() * Math.PI * 2
@@ -1320,6 +1528,18 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     pinchActiveRef.current = false;
   };
 
+  const clearScannerCanvas = () => {
+    const canvas = scannerCanvasRef.current;
+    const viewport = viewportRef.current;
+    if (!canvas || !viewport) {
+      return;
+    }
+
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
+    scannerRibbonPointRef.current = null;
+  };
+
   const drawViewportToCanvas = (canvas) => {
     const video = videoRef.current;
     const viewport = viewportRef.current;
@@ -1362,27 +1582,6 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         ctx.drawImage(overlayCanvas, 0, 0, viewportWidth, viewportHeight);
       }
     });
-
-    ctx.save();
-    ctx.strokeStyle = "#123fbe";
-    ctx.lineWidth = 2;
-    const cornerSize = 24;
-    const inset = 22;
-    ctx.beginPath();
-    ctx.moveTo(inset, inset + cornerSize);
-    ctx.lineTo(inset, inset);
-    ctx.lineTo(inset + cornerSize, inset);
-    ctx.moveTo(viewportWidth - inset - cornerSize, inset);
-    ctx.lineTo(viewportWidth - inset, inset);
-    ctx.lineTo(viewportWidth - inset, inset + cornerSize);
-    ctx.moveTo(inset, viewportHeight - inset - cornerSize);
-    ctx.lineTo(inset, viewportHeight - inset);
-    ctx.lineTo(inset + cornerSize, viewportHeight - inset);
-    ctx.moveTo(viewportWidth - inset - cornerSize, viewportHeight - inset);
-    ctx.lineTo(viewportWidth - inset, viewportHeight - inset);
-    ctx.lineTo(viewportWidth - inset, viewportHeight - inset - cornerSize);
-    ctx.stroke();
-    ctx.restore();
 
     return true;
   };
@@ -1476,6 +1675,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     captureSnapshot,
     startRecording,
     stopRecording,
+    clearScannerCanvas,
     isRecording: () => recordingRef.current?.recorder?.state === "recording"
   }));
 
@@ -1675,17 +1875,18 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
           const nextParticle = {
             ...particle,
             x: particle.x + (particle.homeX - particle.x) * 0.08,
-            y: particle.y + particle.baseVy * deltaSeconds
+            y: particle.y + particle.baseVy * transmissionSpeed * deltaSeconds
           };
 
           transmissionHandForcesRef.current.forEach((hand) => {
             const dx = nextParticle.x - hand.x;
             const dy = nextParticle.y - hand.y;
             const distance = Math.hypot(dx, dy);
-            if (distance < TRANSMISSION_HAND_RADIUS) {
-              const falloff = (TRANSMISSION_HAND_RADIUS - distance) / TRANSMISSION_HAND_RADIUS;
+            const handRadius = TRANSMISSION_HAND_RADIUS * transmissionSensitivity;
+            if (distance < handRadius) {
+              const falloff = (handRadius - distance) / handRadius;
               const safeDistance = Math.max(distance, 8);
-              const push = TRANSMISSION_HAND_PUSH * falloff * (0.65 + hand.speed / 520);
+              const push = TRANSMISSION_HAND_PUSH * transmissionSensitivity * falloff * (0.65 + hand.speed / 520);
               const motionX = hand.speed > 30 ? hand.vx / Math.max(hand.speed, 1) : 0;
               const motionY = hand.speed > 30 ? hand.vy / Math.max(hand.speed, 1) : 0;
               nextParticle.x += (dx / safeDistance) * push * 18 + motionX * push * 14;
@@ -1720,6 +1921,8 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         ctx.save();
         ctx.globalAlpha = particle.alpha;
         ctx.font = `${particle.size}px 'Courier New', 'Lucida Console', monospace`;
+        ctx.fillStyle = particle.color;
+        ctx.shadowColor = particle.shadow;
         ctx.translate(particle.x, particle.y);
         ctx.fillText(particle.char, 0, 0);
         ctx.restore();
@@ -1736,7 +1939,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         cancelAnimationFrame(transmissionFrameRef.current);
       }
     };
-  }, [hasCamera, transmissionActive]);
+  }, [hasCamera, transmissionActive, transmissionSensitivity, transmissionSpeed]);
 
   useEffect(() => {
     const canvas = scannerCanvasRef.current;
@@ -1879,7 +2082,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     const video = videoRef.current;
     const viewport = viewportRef.current;
 
-    if (portalPreset !== "echo") {
+    if (portalPreset !== "echo" && !portalsRef.current.some((portal) => portal.preset === "echo")) {
       echoFramesRef.current = [];
     }
 
@@ -1953,7 +2156,8 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         );
       });
 
-      if (portalPreset === "echo" && now - lastEchoCaptureRef.current > 150) {
+      const needsEchoFrames = portalPreset === "echo" || portalsRef.current.some((portal) => portal.preset === "echo");
+      if (needsEchoFrames && now - lastEchoCaptureRef.current > 150) {
         const echoCanvas = document.createElement("canvas");
         echoCanvas.width = metrics.viewportWidth;
         echoCanvas.height = metrics.viewportHeight;
@@ -1964,7 +2168,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
       }
 
       portalsRef.current.forEach((portal) => {
-        drawPortal(ctx, video, metrics, portal, portalPreset, echoFramesRef.current);
+        drawPortal(ctx, video, metrics, portal, portal.preset ?? portalPreset, echoFramesRef.current);
       });
 
       drawFingerCursor(ctx, fingerCursorRef.current);
@@ -1997,12 +2201,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
     }
 
     if (scannerActive) {
-      const canvas = scannerCanvasRef.current;
-      const viewport = viewportRef.current;
-      if (canvas && viewport) {
-        const ctx = canvas.getContext("2d");
-        ctx.clearRect(0, 0, viewport.clientWidth, viewport.clientHeight);
-      }
+      clearScannerCanvas();
     }
 
     const point = getPortalPointerPoint(event);
@@ -2057,7 +2256,7 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
   return (
     <main
       ref={viewportRef}
-      className="webcam-frame webcam-surface relative overflow-hidden border border-black/15 bg-[#dcdee0]"
+      className="webcam-frame webcam-surface pt-webcam-stage relative overflow-hidden bg-[#dcdee0]"
       onPointerDown={handlePortalPointerDown}
       onPointerMove={handlePortalPointerMove}
       onPointerUp={handlePortalPointerUp}
@@ -2081,10 +2280,6 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
         className={["transmission-canvas absolute inset-0 h-full w-full", transmissionActive ? "opacity-100" : "opacity-0"].join(" ")}
       />
       <canvas ref={portalCanvasRef} className="portal-canvas absolute inset-0 h-full w-full" />
-      <div className="corner corner-tl" />
-      <div className="corner corner-tr" />
-      <div className="corner corner-bl" />
-      <div className="corner corner-br" />
       <div className="relative z-10 flex h-full items-center justify-center">
         {!hasCamera && (
           <div className="camera-start-panel flex flex-col items-center gap-3 text-center">
@@ -2113,36 +2308,18 @@ const WebcamPlaceholder = forwardRef(function WebcamPlaceholder({ activeMode, sc
 });
 
 export default function App() {
-  const [activeMode, setActiveMode] = useState("transmission");
+  const [activeMode, setActiveMode] = useState(null);
+  const [activeTool, setActiveTool] = useState("help");
   const [scannerMode, setScannerMode] = useState("sweet");
   const [scannerRibbonColor, setScannerRibbonColor] = useState("rgba(210, 255, 120, 1)");
   const [portalPreset, setPortalPreset] = useState("fisheye");
-  const [isRecording, setIsRecording] = useState(false);
-  const [now, setNow] = useState(() => new Date());
-  const [layoutPositions] = useState(loadLayoutPositions);
+  const [transmissionSensitivity, setTransmissionSensitivity] = useState(1);
+  const [transmissionSpeed, setTransmissionSpeed] = useState(1);
   const webcamRef = useRef(null);
-  const lastCaptureRef = useRef(null);
 
-  useEffect(() => {
-    const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleCaptureReady = (capture) => {
-    lastCaptureRef.current = capture;
-  };
-
-  const handleRecordingClick = () => {
-    if (webcamRef.current?.isRecording()) {
-      webcamRef.current.stopRecording();
-      return;
-    }
-
-    webcamRef.current?.startRecording();
-  };
-
-  const handleSnapshotClick = () => {
-    webcamRef.current?.captureSnapshot();
+  const openHelp = () => {
+    setActiveMode(null);
+    setActiveTool("help");
   };
 
   const handleScannerModeSelect = (mode) => {
@@ -2153,139 +2330,212 @@ export default function App() {
     }
   };
 
+  const handleToolOpen = (tool) => {
+    setActiveTool(tool);
+    if (tool === "waterfall") {
+      setActiveMode("transmission");
+    } else if (tool === "scanner") {
+      setActiveMode("scanner");
+    } else if (tool === "portals") {
+      setActiveMode("portal");
+    }
+  };
+
+  const closeToolWindow = () => {
+    setActiveTool(null);
+  };
+
+  const clearScannerDrawing = () => {
+    webcamRef.current?.clearScannerCanvas();
+  };
+
   return (
-    <div className="app-shell min-h-screen bg-shell px-5 pb-4 pt-10 text-[#1c1c1c] sm:px-8 sm:pt-12 lg:px-9">
+    <div className="pt-shell text-[#1c1c1c]">
       <SparkleCursor />
-      <div className="mx-auto flex max-w-[1780px] flex-col">
-        <header className="app-header mb-5 text-center">
-          <LayoutSection
-            id="title"
-            position={layoutPositions.title}
+      <header className="pt-header">
+        <nav className="pt-toolbar" aria-label="Princess Terminal tools">
+          <button
+            type="button"
+            className={["pt-icon-button", activeTool === "help" ? "is-active" : ""].join(" ")}
+            aria-label="Home / Help"
+            title="Home / Help"
+            onClick={openHelp}
           >
-            <div className="logo-frame">
-              <LogoTitle />
-              <p className="logo-subtitle font-mono text-sm font-bold tracking-[0.3em]">
-                pr1nc3ssT3rmin@l.exe
-              </p>
-            </div>
-          </LayoutSection>
-        </header>
-
-        <div className="app-grid grid gap-5 lg:grid-cols-[150px_minmax(0,1fr)_285px] xl:grid-cols-[165px_minmax(0,1fr)_305px]">
-          <aside className="left-rail">
-            <LayoutSection
-              id="modeButtons"
-              position={layoutPositions.modeButtons}
-              className="w-full"
-            >
-              <div className="mode-stack">
-                {modes.map((mode) => (
-                  <ModeButton
-                    key={mode.id}
-                    mode={mode}
-                    active={activeMode === mode.id}
-                    onClick={() => setActiveMode(mode.id)}
-                  />
-                ))}
-              </div>
-            </LayoutSection>
-          </aside>
-
-          <WebcamPlaceholder
-            ref={webcamRef}
-            activeMode={activeMode}
-            scannerMode={scannerMode}
-            scannerRibbonColor={scannerRibbonColor}
-            portalPreset={portalPreset}
-            onCaptureReady={handleCaptureReady}
-            onRecordingStateChange={setIsRecording}
-          />
-
-          <aside className="right-rail">
-            <div className="right-control-stack">
-              <LayoutSection
-                id="scannerPanel"
-                position={layoutPositions.scannerPanel}
-              >
-                <OptionPanel
-                  title="scanner mode"
-                  options={scannerModes}
-                  selected={scannerMode}
-                  onSelect={handleScannerModeSelect}
-                />
-              </LayoutSection>
-              <LayoutSection
-                id="portalPanel"
-                position={layoutPositions.portalPanel}
-              >
-                <OptionPanel
-                  title="portal presets"
-                  options={portalPresets}
-                  selected={portalPreset}
-                  onSelect={setPortalPreset}
-                />
-              </LayoutSection>
-            </div>
-          </aside>
+            <CrownIcon />
+          </button>
+          <button
+            type="button"
+            className={["pt-icon-button", activeMode === "transmission" ? "is-active" : ""].join(" ")}
+            aria-label="Digit Waterfall"
+            title="Digit Waterfall"
+            onClick={() => handleToolOpen("waterfall")}
+          >
+            <DigitIcon />
+          </button>
+          <button
+            type="button"
+            className={["pt-icon-button", activeMode === "scanner" ? "is-active" : ""].join(" ")}
+            aria-label="Scanner"
+            title="Scanner"
+            onClick={() => handleToolOpen("scanner")}
+          >
+            <img className="pt-header-png-icon" src={scannerIcon} alt="" />
+          </button>
+          <button
+            type="button"
+            className={["pt-icon-button", activeMode === "portal" ? "is-active" : ""].join(" ")}
+            aria-label="Portals"
+            title="Portals"
+            onClick={() => handleToolOpen("portals")}
+          >
+            <img className="pt-header-png-icon" src={portalIcon} alt="" />
+          </button>
+        </nav>
+        <div className="pt-title-block">
+          <LogoTitle />
         </div>
+      </header>
 
-        <footer className="app-footer mt-3 border-t border-[#d6d6d6] pt-3">
-          <div className="footer-grid grid gap-5 lg:grid-cols-[150px_minmax(0,1fr)_285px] xl:grid-cols-[165px_minmax(0,1fr)_305px]">
-            <div />
-            <LayoutSection
-              id="captureControls"
-              position={layoutPositions.captureControls}
-              className="footer-controls"
-            >
-              <div className="flex flex-wrap justify-center gap-16">
-                <RetroButton
-                  pressed={isRecording}
-                  onClick={handleRecordingClick}
-                  className="utility-button"
-                  aria-pressed={isRecording}
-                >
-                  <UtilityIcon type="rec" active={isRecording} />
-                  <span>REC</span>
-                </RetroButton>
-                <RetroButton className="utility-button" onClick={handleSnapshotClick}>
-                  <UtilityIcon type="snap" />
-                  <span>SNAP</span>
-                </RetroButton>
-              </div>
-            </LayoutSection>
-            <div />
-          </div>
-        </footer>
+      <section className="pt-webcam-layer">
+        <WebcamPlaceholder
+          ref={webcamRef}
+          activeMode={activeMode}
+          scannerMode={scannerMode}
+          scannerRibbonColor={scannerRibbonColor}
+          portalPreset={portalPreset}
+          transmissionSensitivity={transmissionSensitivity}
+          transmissionSpeed={transmissionSpeed}
+        />
+      </section>
 
-        <div className="lower-grid mt-3 grid gap-5 lg:grid-cols-[150px_minmax(0,1fr)_285px] xl:grid-cols-[165px_minmax(0,1fr)_305px]">
-          <div className="lower-left-stack">
-            <LayoutSection
-              id="systemInfo"
-              position={layoutPositions.systemInfo}
-            >
-              <StatusPanel />
-            </LayoutSection>
-            <LayoutSection
-              id="madeBy"
-              position={layoutPositions.madeBy}
-            >
-              <MadeByBadge />
-            </LayoutSection>
+      {activeTool === "help" && (
+        <PopupWindow
+          id="help"
+          title="help.txt"
+          defaultPosition={{ x: Math.max(24, window.innerWidth - 360), y: 190 }}
+          className="pt-help-window"
+          onClose={closeToolWindow}
+        >
+          <div className="pt-help-welcome">
+            <CrownIcon />
+            <div>
+              <p>welcome to</p>
+              <p>princess terminal!</p>
+            </div>
+            <CrownIcon />
           </div>
-          <LayoutSection
-            id="instructions"
-            position={layoutPositions.instructions}
-          >
-            <InstructionsPanel />
-          </LayoutSection>
-          <LayoutSection
-            id="internetTime"
-            position={layoutPositions.internetTime}
-          >
-            <InternetTimePanel now={now} />
-          </LayoutSection>
-        </div>
-      </div>
+          <div className="pt-help-copy">
+            <p>click the icons at the top</p>
+            <p>to open each tool.</p>
+          </div>
+          <div className="pt-help-copy">
+            <p>experiment, explore,</p>
+            <p>and see what you can create.</p>
+          </div>
+        </PopupWindow>
+      )}
+
+      {activeTool === "waterfall" && (
+        <PopupWindow
+          id="waterfall"
+          title="digit waterfall"
+          defaultPosition={{ x: 68, y: 214 }}
+          className="pt-waterfall-window"
+          onClose={closeToolWindow}
+        >
+          <div className="pt-copy-block">
+            <p>move your hands to push</p>
+            <p>the digital rain out of</p>
+            <p>the way</p>
+            <p>open palms work best!</p>
+          </div>
+          <label className="pt-slider-row">
+            <span>sensitivity</span>
+            <input
+              type="range"
+              min="0.55"
+              max="1.75"
+              step="0.05"
+              value={transmissionSensitivity}
+              onChange={(event) => setTransmissionSensitivity(Number(event.target.value))}
+            />
+          </label>
+          <label className="pt-slider-row">
+            <span>speed</span>
+            <input
+              type="range"
+              min="0.55"
+              max="1.75"
+              step="0.05"
+              value={transmissionSpeed}
+              onChange={(event) => setTransmissionSpeed(Number(event.target.value))}
+            />
+          </label>
+          <div className="pt-stream-status">
+            <span />
+            <strong>stream active</strong>
+          </div>
+        </PopupWindow>
+      )}
+
+      {activeTool === "scanner" && (
+        <PopupWindow
+          id="scanner"
+          title="scanner"
+          defaultPosition={{ x: Math.max(24, window.innerWidth - 500), y: 190 }}
+          className="pt-scanner-window"
+          onClose={closeToolWindow}
+        >
+          <h3 className="pt-tool-heading">scanner color</h3>
+          <div className="pt-tool-options">
+            {scannerModes.map((mode) => (
+              <ToolOption
+                key={mode.id}
+                option={mode}
+                selected={scannerMode === mode.id}
+                onSelect={handleScannerModeSelect}
+              />
+            ))}
+          </div>
+          <button type="button" className="pt-clear-button" onClick={clearScannerDrawing}>
+            <span>✧</span>
+            <strong>clear</strong>
+          </button>
+          <div className="pt-tool-instructions">
+            <p><span className="pt-mini-icon pt-mini-draw" /> draw with your index finger</p>
+            <p><span className="pt-mini-icon pt-mini-fist" /> make a fist to stop drawing</p>
+            <p><span className="pt-mini-icon pt-mini-click" /> click the video to clear</p>
+          </div>
+        </PopupWindow>
+      )}
+
+      {activeTool === "portals" && (
+        <PopupWindow
+          id="portals"
+          title="portals"
+          defaultPosition={{ x: Math.max(24, window.innerWidth - 460), y: 164 }}
+          className="pt-portals-window"
+          onClose={closeToolWindow}
+        >
+          <h3 className="pt-tool-heading">portal mode</h3>
+          <div className="pt-portal-options">
+            {portalPresets.map((preset) => (
+              <ToolOption
+                key={preset.id}
+                option={preset}
+                selected={portalPreset === preset.id}
+                onSelect={setPortalPreset}
+              />
+            ))}
+          </div>
+          <div className="pt-portal-copy">
+            <p>open palm to create a portal</p>
+            <p>close fist to lock it</p>
+            <p>create multiple portals</p>
+          </div>
+        </PopupWindow>
+      )}
+
     </div>
   );
 }
